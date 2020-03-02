@@ -69,120 +69,122 @@ begin
     
 
 
-if(IOW)//CPU写数据
-begin
-    if(address[7:0]==8'b0010_0000) ms=wdata;//CPU写方式寄存器，CNT1此处应该是22
-    else if(address[7:0]==8'b0010_0100) 
-        begin
-        ini=wdata;//CPU写初值寄存器，CNT1此处应该是26
-        count1=ini;//count1用来备份初值寄存器的值
-        end
-end
+    if(IOW)//CPU写数据
+    begin
+        if(address[7:0]==8'b0010_0000) ms=wdata;//CPU写方式寄存器
+        else  
+            begin
+            ini=wdata;//CPU写初值寄存器
+            count1=ini;//count1用来备份初值寄存器的值
+            end
+    end
     
 
 
-if(IOR)//CPU读数据
-begin
-    if(address[7:0]==8'b0010_0000)
-        begin
-        rda=ms;//CPU读状态寄存器，CNT1此处应该是22
-        ms[3:2]=2'b00;//状态寄存器读取后清零
-        ms[15]=0;
-        COU2=count2;
+    if(IOR)//CPU读数据
+    begin
+        if(address[7:0]==8'b0010_0000)
+            begin
+            rda=ms;//CPU读状态寄存器
+            ms[3:2]=2'b00;//状态寄存器读取后清零
+            ms[15]=0;
+            //COU2=count2;
+            end
+        else  begin
+            rda=ini;//CPU读初值寄存器
         end
-    else if(address[7:0]==8'b0010_0100) rda=ini;//CPU读初值寄存器，CNT1此处应该是26
-end
-    
+    end
 
 
 
 
-if(timing)//计时
-begin
-    if({ms[1],ms[0]}==2'b00)//读方式寄存器，非循环定时
-        begin
-        ms[15]=1;//写状态寄存器，定时开始
-        if(ini==1)//初值寄存器减到1，定时结束
+
+    if(timing)//计时
+    begin
+        if({ms[1],ms[0]}==2'b00)//读方式寄存器，非循环定时
             begin
-            ms[15]=0;//定时结束
-            ms[3:2]=2'b01;//定时到
-            COU=0;//定时到输出一个低电平
+            ms[15]=1;//写状态寄存器，定时开始
+            if(ini==1)//初值寄存器减到1，定时结束
+                begin
+                ms[15]=0;//定时结束
+                ms[3:2]=2'b01;//定时到
+                COUt0=0;//定时到输出一个低电平
+                end
+            else if(ini&gt;1)//尚未定时到
+                begin
+                ini=ini-1;//初值减1
+                COUt0=1;//平时输出高电平
+                end
+            else COU=1;
+            end    
+        else if({ms[1],ms[0]==2'b10})//循环定时
+            begin
+            ms[15]=1;//写状态寄存器，定时开始
+            if(ini==1)//初值寄存器减到1，定时到
+                begin
+                ms[3:2]=2'b01;
+                ini=count1;//count1保存的初值再赋值给ini寄存器
+                COUT0=0;//定时到输出一个低电平
+                end
+            else if(ini==count1-1)
+                begin
+                ms[3:2]=2'b00;//清除定时到
+                ini=ini-1;
+                COUT0=1'b1;
+                end
+            else
+                begin
+                ini=ini-1;
+                COUT0=1;//平时输出高电平
+                end
             end
-        else if(ini&gt;1)//尚未定时到
-            begin
-            ini=ini-1;//初值减1
-            COU=1;//平时输出高电平
-            end
-        else COU=1;
-        end    
-    else if({ms[1],ms[0]==2'b10})//循环定时
-        begin
-        ms[15]=1;//写状态寄存器，定时开始
-        if(ini==1)//初值寄存器减到1，定时到
-            begin
-            ms[3:2]=2'b01;
-            ini=count1;//count1保存的初值再赋值给ini寄存器
-            COU=0;//定时到输出一个低电平
-            end
-        else if(ini==count1-1)
-            begin
-            ms[3:2]=2'b00;//清除定时到
-            ini=ini-1;
-            COU=1'b1;
-            end
-        else
-            begin
-            ini=ini-1;
-            COU=1;//平时输出高电平
-            end
-        end
-end
-else begin 
-     COU=1;
-     ms[15]=0;//没有处在计时的状态
-     end
+    end
+    else begin 
+         COUT0=1;
+         ms[15]=0;//没有处在计时的状态
+         end
 
 
 
 
-if(counting &amp;&amp; pulse0)//计数
-begin
-    if({ms[1],ms[0]}==2'b01)
-        begin
-        ms[15]=1;//计数开始
+    if(counting && pulse0)//计数
+    begin
+        if({ms[1],ms[0]}==2'b01)
             begin
+            ms[15]=1;//计数开始
+                begin
+                if(count0==ini)//计数值等于初值
+                    begin
+                    ms[15]=0;//计数结束
+                    ms[3:2]=2'b10;//设置状态寄存器，计数到
+                    end
+                else begin
+                     count0=count0+1;//计数
+                     //count2=count2+1;//测试
+                     end
+                end
+            end 
+        else if({ms[1],ms[0]}==2'b11)//循环计数
+            begin
+            ms[15]=1;//计数开始
             if(count0==ini)//计数值等于初值
                 begin
-                ms[15]=0;//计数结束
                 ms[3:2]=2'b10;//设置状态寄存器，计数到
+                count0=1;//循环，重置计数值寄存器
+                //count2=count2+1;//测试
                 end
-            else begin
+            else if(count0==0)
+                begin 
+                ms[3:2]=2'b00;//清除状态寄存器
+                count0=count0+1;
+                //count2=count2+1;//测试
+                end
+            else begin 
                  count0=count0+1;//计数
                  count2=count2+1;//测试
                  end
             end
-        end 
-    else if({ms[1],ms[0]}==2'b11)//循环计数
-        begin
-        ms[15]=1;//计数开始
-        if(count0==ini)//计数值等于初值
-            begin
-            ms[3:2]=2'b10;//设置状态寄存器，计数到
-            count0=1;//循环，重置计数值寄存器
-            count2=count2+1;//测试
-            end
-        else if(count0==0)
-            begin 
-            ms[3:2]=2'b00;//清除状态寄存器
-            count0=count0+1;
-            count2=count2+1;//测试
-            end
-        else begin 
-             count0=count0+1;//计数
-             count2=count2+1;//测试
-             end
-        end
-end else ms[15]=0;//没有处在计数的状态ms[15]为0，COUNTING 
-end//CS 
-end//always
-endmodule
+    end else ms[15]=0;//没有处在计数的状态ms[15]为0，COUNTING 
+    end//CS 
+    end//always
+    endmodule
